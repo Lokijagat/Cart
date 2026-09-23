@@ -1,0 +1,25 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 5,
+            "cost": { "amountPerQuantity": { "amount": "199.00" } },
+            "merchandise": { "product": { "eligible": false } }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["PRODUCT"],
+        "metafield": { "value": "{\"quantity\":3,\"bundlePrice\":499}" }
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

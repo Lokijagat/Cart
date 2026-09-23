@@ -1,0 +1,21 @@
+api_version = "2026-07"
+
+[[extensions]]
+name = "t:name"
+handle = "mixmach-discount"
+type = "function"
+uid = "7d4897ef-6466-46ef-377c-9a9e729dbc9dd9b6f9d4"
+description = "t:description"
+
+  [[extensions.targeting]]
+  target = "cart.lines.discounts.generate.run"
+  input_query = "src/cart_lines_discounts_generate_run.graphql"
+  export = "cart-lines-discounts-generate-run"
+
+  [extensions.input.variables]
+  namespace = "$app:mixmach-discount"
+  key = "configuration"
+
+  [extensions.build]
+  command = ""
+  path = "dist/function.wasm"

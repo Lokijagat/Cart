@@ -1,0 +1,59 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "lines": [
+          {
+            "id": "gid://shopify/CartLine/0",
+            "quantity": 1,
+            "cost": { "amountPerQuantity": { "amount": "199.00" } },
+            "merchandise": { "product": { "eligible": true } }
+          },
+          {
+            "id": "gid://shopify/CartLine/1",
+            "quantity": 1,
+            "cost": { "amountPerQuantity": { "amount": "249.00" } },
+            "merchandise": { "product": { "eligible": true } }
+          },
+          {
+            "id": "gid://shopify/CartLine/2",
+            "quantity": 1,
+            "cost": { "amountPerQuantity": { "amount": "299.00" } },
+            "merchandise": { "product": { "eligible": true } }
+          }
+        ]
+      },
+      "discount": {
+        "discountClasses": ["PRODUCT"],
+        "metafield": { "value": "{\"quantity\":3,\"bundlePrice\":499}" }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "productDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Bundle deal: 3 for 499",
+                "targets": [
+                  { "cartLine": { "id": "gid://shopify/CartLine/2", "quantity": 1 } },
+                  { "cartLine": { "id": "gid://shopify/CartLine/1", "quantity": 1 } },
+                  { "cartLine": { "id": "gid://shopify/CartLine/0", "quantity": 1 } }
+                ],
+                "value": {
+                  "fixedAmount": {
+                    "amount": "248.00",
+                    "appliesToEachItem": false
+                  }
+                }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}
