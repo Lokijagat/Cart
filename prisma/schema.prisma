@@ -48,3 +48,19 @@ model Discount {
 
   @@index([shop])
 }
+
+model FlashOffer {
+  id              String   @id @default(cuid())
+  shop            String
+  name            String
+  message         String
+  backgroundColor String   @default("#2d4a2f")
+  textColor       String   @default("#ffffff")
+  showOnDrawer    Boolean  @default(true)
+  showOnCartPage  Boolean  @default(true)
+  enabled         Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([shop])
+}

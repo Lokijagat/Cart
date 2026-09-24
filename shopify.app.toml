@@ -33,6 +33,11 @@ required = true
 name = "Description"
 type = "multi_line_text_field"
 
+[app_proxy]
+url = "/proxy"
+prefix = "apps"
+subpath = "mixmach"
+
 [webhooks]
 api_version = "2026-10"
 
