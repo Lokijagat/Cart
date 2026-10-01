@@ -8,26 +8,55 @@
           {
             "id": "gid://shopify/CartLine/0",
             "quantity": 1,
-            "cost": { "amountPerQuantity": { "amount": "199.00" } },
-            "merchandise": { "product": { "eligible": true } }
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "199.00"
+              }
+            },
+            "merchandise": {
+              "product": {
+                "eligible": true
+              }
+            }
           },
           {
             "id": "gid://shopify/CartLine/1",
             "quantity": 1,
-            "cost": { "amountPerQuantity": { "amount": "249.00" } },
-            "merchandise": { "product": { "eligible": true } }
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "249.00"
+              }
+            },
+            "merchandise": {
+              "product": {
+                "eligible": true
+              }
+            }
           },
           {
             "id": "gid://shopify/CartLine/2",
             "quantity": 1,
-            "cost": { "amountPerQuantity": { "amount": "299.00" } },
-            "merchandise": { "product": { "eligible": true } }
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "299.00"
+              }
+            },
+            "merchandise": {
+              "product": {
+                "eligible": true
+              }
+            }
           }
         ]
       },
       "discount": {
-        "discountClasses": ["PRODUCT"],
-        "metafield": { "value": "{\"quantity\":3,\"bundlePrice\":499}" }
+        "discountClasses": [
+          "PRODUCT"
+        ],
+        "metafield": {
+          "value": "{\"quantity\":3,\"bundlePrice\":499}"
+        },
+        "progressBarMetafield": null
       }
     },
     "output": {
@@ -38,9 +67,24 @@
               {
                 "message": "Bundle deal: 3 for 499",
                 "targets": [
-                  { "cartLine": { "id": "gid://shopify/CartLine/2", "quantity": 1 } },
-                  { "cartLine": { "id": "gid://shopify/CartLine/1", "quantity": 1 } },
-                  { "cartLine": { "id": "gid://shopify/CartLine/0", "quantity": 1 } }
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/2",
+                      "quantity": 1
+                    }
+                  },
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/1",
+                      "quantity": 1
+                    }
+                  },
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/0",
+                      "quantity": 1
+                    }
+                  }
                 ],
                 "value": {
                   "fixedAmount": {

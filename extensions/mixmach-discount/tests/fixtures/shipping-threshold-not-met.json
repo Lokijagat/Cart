@@ -1,0 +1,21 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-discounts-generate-run",
+    "target": "cart.delivery-options.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": { "subtotalAmount": { "amount": "300.00" } },
+        "deliveryGroups": [{ "id": "gid://shopify/CartDeliveryGroup/0" }]
+      },
+      "discount": {
+        "discountClasses": ["SHIPPING"],
+        "metafield": {
+          "value": "{\"freeShippingThreshold\":499}"
+        }
+      }
+    },
+    "output": {
+      "operations": []
+    }
+  }
+}

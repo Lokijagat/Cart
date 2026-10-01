@@ -16,7 +16,8 @@
     "cart-drawer",
   ];
   var DRAWER_HEADING_SELECTORS = [".x-cart-heading", ".theme-drawer__header"];
-  var DRAWER_SLOT_CLASS = "mixmach-flash-offer-drawer-slot";
+  var DRAWER_OFFER_SLOT_CLASS = "mixmach-flash-offer-drawer-slot";
+  var DRAWER_PROGRESS_SLOT_CLASS = "mixmach-progress-bar-drawer-slot";
 
   var PAGE_MAIN_SELECTORS = ["#MainContent", 'main[role="main"]', "main"];
   var PAGE_DISCOUNT_LANDMARK_SELECTORS = [
@@ -24,11 +25,57 @@
     'label[for*="discount" i]',
     'input[name*="discount" i]',
   ];
-  var PAGE_DISCOUNT_SLOT_CLASS = "mixmach-flash-offer-page-discount-slot";
-  var PAGE_BLOCK_SLOT_SELECTOR = ".mixmach-flash-offer-page-slot";
+  var PAGE_OFFER_SLOT_CLASS = "mixmach-flash-offer-page-discount-slot";
+  var PAGE_PROGRESS_SLOT_CLASS = "mixmach-progress-bar-page-discount-slot";
+  var PAGE_OFFER_BLOCK_SELECTOR = ".mixmach-flash-offer-page-slot";
+  var PAGE_PROGRESS_BLOCK_SELECTOR = ".mixmach-progress-bar-page-slot";
 
   var ROTATE_INTERVAL_MS = 4000;
   var FADE_DURATION_MS = 250;
+
+  function findFirst(selectors, root) {
+    root = root || document;
+    for (var i = 0; i < selectors.length; i++) {
+      var el = root.querySelector(selectors[i]);
+      if (el) return el;
+    }
+    return null;
+  }
+
+  function isCartPage() {
+    return /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?cart\/?(?:$|\?)/i.test(window.location.pathname);
+  }
+
+  function ensureSlot(slotClass, referenceEl, position) {
+    if (!referenceEl || !referenceEl.parentNode) return null;
+
+    var existing = document.querySelector("." + slotClass);
+    if (existing) return existing;
+
+    var slot = document.createElement("div");
+    slot.className = slotClass;
+    if (position === "after") {
+      referenceEl.parentNode.insertBefore(slot, referenceEl.nextSibling);
+    } else {
+      referenceEl.parentNode.insertBefore(slot, referenceEl);
+    }
+    return slot;
+  }
+
+  function getCartTotal() {
+    return fetch("/cart.js", { credentials: "same-origin" })
+      .then(function (res) {
+        return res.json();
+      })
+      .then(function (cart) {
+        return cart.total_price / 100;
+      })
+      .catch(function () {
+        return null;
+      });
+  }
+
+  // --- Flash offers ---
 
   function applyOffer(banner, offer) {
     banner.style.backgroundColor = offer.backgroundColor || "#2d4a2f";
@@ -36,7 +83,7 @@
     banner.textContent = offer.message || "";
   }
 
-  function renderInto(container, offers, contextKey) {
+  function renderOffersInto(container, offers, contextKey) {
     var applicable = offers.filter(function (offer) {
       return offer[contextKey];
     });
@@ -80,33 +127,86 @@
     }
   }
 
-  function findFirst(selectors, root) {
-    root = root || document;
-    for (var i = 0; i < selectors.length; i++) {
-      var el = root.querySelector(selectors[i]);
-      if (el) return el;
+  // --- Progress bar ---
+
+  function buildMilestones(progressBar) {
+    var milestones = [];
+    if (progressBar.freeShippingThreshold != null) {
+      milestones.push({ amount: progressBar.freeShippingThreshold, label: "Free Shipping", icon: "🚚" });
     }
-    return null;
+    (progressBar.tiers || []).forEach(function (tier) {
+      milestones.push({ amount: tier.minimumAmount, label: tier.percentage + "% Off", icon: "🎁" });
+    });
+    milestones.sort(function (a, b) {
+      return a.amount - b.amount;
+    });
+    return milestones;
   }
 
-  function isCartPage() {
-    return /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?cart\/?(?:$|\?)/i.test(window.location.pathname);
-  }
-
-  function ensureSlot(slotClass, referenceEl, position) {
-    if (!referenceEl || !referenceEl.parentNode) return null;
-
-    var existing = document.querySelector("." + slotClass);
-    if (existing) return existing;
-
-    var slot = document.createElement("div");
-    slot.className = slotClass;
-    if (position === "after") {
-      referenceEl.parentNode.insertBefore(slot, referenceEl.nextSibling);
-    } else {
-      referenceEl.parentNode.insertBefore(slot, referenceEl);
+  function renderProgressBarInto(container, progressBar, contextKey, total) {
+    if (!progressBar || !progressBar[contextKey] || total == null) {
+      container.innerHTML = "";
+      return;
     }
-    return slot;
+
+    var milestones = buildMilestones(progressBar);
+    if (!milestones.length) {
+      container.innerHTML = "";
+      return;
+    }
+
+    var signature = total.toFixed(2) + "|" + milestones.map(function (m) { return m.amount; }).join(",");
+    if (container.dataset.mixmachSignature === signature) return;
+    container.dataset.mixmachSignature = signature;
+
+    var maxAmount = milestones[milestones.length - 1].amount;
+    var fillPercent = Math.max(0, Math.min(100, (total / maxAmount) * 100));
+    var nextMilestone = milestones.filter(function (m) {
+      return total < m.amount;
+    })[0];
+
+    var messageEl = document.createElement("div");
+    messageEl.className = "mixmach-progress-message";
+    messageEl.textContent = nextMilestone
+      ? "Add " + (nextMilestone.amount - total).toFixed(2) + " more to unlock " + nextMilestone.label + "!"
+      : "🎉 You've unlocked every reward!";
+
+    var track = document.createElement("div");
+    track.className = "mixmach-progress-track";
+
+    var fill = document.createElement("div");
+    fill.className = "mixmach-progress-fill";
+    fill.style.width = fillPercent + "%";
+    track.appendChild(fill);
+
+    milestones.forEach(function (m) {
+      var pos = (m.amount / maxAmount) * 100;
+      var reached = total >= m.amount;
+
+      var marker = document.createElement("div");
+      marker.className = "mixmach-progress-marker" + (reached ? " mixmach-progress-marker--reached" : "");
+      marker.style.left = pos + "%";
+
+      var icon = document.createElement("span");
+      icon.className = "mixmach-progress-marker__icon";
+      icon.textContent = m.icon;
+
+      var label = document.createElement("span");
+      label.className = "mixmach-progress-marker__label";
+      label.textContent = m.label;
+
+      marker.appendChild(icon);
+      marker.appendChild(label);
+      track.appendChild(marker);
+    });
+
+    var wrapper = document.createElement("div");
+    wrapper.className = "mixmach-progress-bar";
+    wrapper.appendChild(messageEl);
+    wrapper.appendChild(track);
+
+    container.innerHTML = "";
+    container.appendChild(wrapper);
   }
 
   // --- Cart drawer ---
@@ -115,58 +215,78 @@
     return findFirst(DRAWER_SELECTORS);
   }
 
-  function refreshDrawer(offers) {
+  function drawerAnchor(drawer) {
+    var offerSlot = drawer.querySelector("." + DRAWER_OFFER_SLOT_CLASS);
+    if (offerSlot) return offerSlot;
+    return findFirst(DRAWER_HEADING_SELECTORS, drawer);
+  }
+
+  function refreshDrawer(offers, progressBar, total) {
     var drawer = findDrawer();
     if (!drawer) return;
 
-    var slot = drawer.querySelector("." + DRAWER_SLOT_CLASS);
-    if (!slot) {
-      slot = document.createElement("div");
-      slot.className = DRAWER_SLOT_CLASS;
-
+    var offerSlot = drawer.querySelector("." + DRAWER_OFFER_SLOT_CLASS);
+    if (!offerSlot) {
       var heading = findFirst(DRAWER_HEADING_SELECTORS, drawer);
       if (heading && heading.parentNode) {
-        heading.parentNode.insertBefore(slot, heading.nextSibling);
-      } else {
-        drawer.insertBefore(slot, drawer.firstChild);
+        offerSlot = document.createElement("div");
+        offerSlot.className = DRAWER_OFFER_SLOT_CLASS;
+        heading.parentNode.insertBefore(offerSlot, heading.nextSibling);
       }
     }
+    if (offerSlot) renderOffersInto(offerSlot, offers, "showOnDrawer");
 
-    renderInto(slot, offers, "showOnDrawer");
+    var progressSlot = drawer.querySelector("." + DRAWER_PROGRESS_SLOT_CLASS);
+    if (!progressSlot) {
+      var anchor = drawerAnchor(drawer);
+      if (anchor && anchor.parentNode) {
+        progressSlot = document.createElement("div");
+        progressSlot.className = DRAWER_PROGRESS_SLOT_CLASS;
+        anchor.parentNode.insertBefore(progressSlot, anchor.nextSibling);
+      }
+    }
+    if (progressSlot) renderProgressBarInto(progressSlot, progressBar, "showOnDrawer", total);
   }
 
   // --- Cart page ---
 
-  function refreshCartPage(offers) {
+  function refreshCartPage(offers, progressBar, total) {
     if (!isCartPage()) return;
 
     var main = findFirst(PAGE_MAIN_SELECTORS) || document.body;
-
-    // Best-effort auto placement, right before the discount code field.
     var discountLandmark = findFirst(PAGE_DISCOUNT_LANDMARK_SELECTORS, main);
-    var discountSlot = ensureSlot(PAGE_DISCOUNT_SLOT_CLASS, discountLandmark, "before");
-    if (discountSlot) renderInto(discountSlot, offers, "showOnCartPage");
 
-    // Merchant-placed "Mixmach Flash Offers" app block: works on any theme,
-    // wherever the merchant dragged it in the theme editor.
-    document.querySelectorAll(PAGE_BLOCK_SLOT_SELECTOR).forEach(function (slot) {
-      renderInto(slot, offers, "showOnCartPage");
+    var offerSlot = ensureSlot(PAGE_OFFER_SLOT_CLASS, discountLandmark, "before");
+    if (offerSlot) renderOffersInto(offerSlot, offers, "showOnCartPage");
+
+    var progressSlot = ensureSlot(PAGE_PROGRESS_SLOT_CLASS, discountLandmark, "before");
+    if (progressSlot) renderProgressBarInto(progressSlot, progressBar, "showOnCartPage", total);
+
+    // Merchant-placed app blocks: work on any theme, wherever dragged in the theme editor.
+    document.querySelectorAll(PAGE_OFFER_BLOCK_SELECTOR).forEach(function (slot) {
+      renderOffersInto(slot, offers, "showOnCartPage");
+    });
+    document.querySelectorAll(PAGE_PROGRESS_BLOCK_SELECTOR).forEach(function (slot) {
+      renderProgressBarInto(slot, progressBar, "showOnCartPage", total);
     });
   }
 
-  function init(offers) {
-    if (!offers.length) return;
+  function init(offers, progressBar) {
+    if (!offers.length && !progressBar) return;
 
-    refreshDrawer(offers);
-    refreshCartPage(offers);
+    function refreshAll() {
+      getCartTotal().then(function (total) {
+        refreshDrawer(offers, progressBar, total);
+        refreshCartPage(offers, progressBar, total);
+      });
+    }
+
+    refreshAll();
 
     var refreshTimer = null;
     var observer = new MutationObserver(function () {
       if (refreshTimer) clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(function () {
-        refreshDrawer(offers);
-        refreshCartPage(offers);
-      }, 200);
+      refreshTimer = setTimeout(refreshAll, 200);
     });
     observer.observe(document.body, { childList: true, subtree: true });
   }
@@ -176,7 +296,7 @@
       return res.json();
     })
     .then(function (data) {
-      init(data.flashOffers || []);
+      init(data.flashOffers || [], data.progressBar || null);
     })
     .catch(function () {});
 })();

@@ -8,14 +8,27 @@
           {
             "id": "gid://shopify/CartLine/0",
             "quantity": 4,
-            "cost": { "amountPerQuantity": { "amount": "150.00" } },
-            "merchandise": { "product": { "eligible": true } }
+            "cost": {
+              "amountPerQuantity": {
+                "amount": "150.00"
+              }
+            },
+            "merchandise": {
+              "product": {
+                "eligible": true
+              }
+            }
           }
         ]
       },
       "discount": {
-        "discountClasses": ["PRODUCT"],
-        "metafield": { "value": "{\"quantity\":3,\"bundlePrice\":300}" }
+        "discountClasses": [
+          "PRODUCT"
+        ],
+        "metafield": {
+          "value": "{\"quantity\":3,\"bundlePrice\":300}"
+        },
+        "progressBarMetafield": null
       }
     },
     "output": {
@@ -26,7 +39,12 @@
               {
                 "message": "Bundle deal: 3 for 300",
                 "targets": [
-                  { "cartLine": { "id": "gid://shopify/CartLine/0", "quantity": 3 } }
+                  {
+                    "cartLine": {
+                      "id": "gid://shopify/CartLine/0",
+                      "quantity": 3
+                    }
+                  }
                 ],
                 "value": {
                   "fixedAmount": {

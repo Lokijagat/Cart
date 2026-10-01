@@ -13,3 +13,66 @@
 .mixmach-flash-offer.mixmach-flash-offer-fade {
   opacity: 0;
 }
+
+.mixmach-progress-bar {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 16px 16px 32px;
+}
+
+.mixmach-progress-message {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.mixmach-progress-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.mixmach-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: #2d4a2f;
+  transition: width 0.3s ease;
+}
+
+.mixmach-progress-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.mixmach-progress-marker__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid rgba(0, 0, 0, 0.15);
+  font-size: 11px;
+}
+
+.mixmach-progress-marker--reached .mixmach-progress-marker__icon {
+  border-color: #2d4a2f;
+  background: #2d4a2f;
+}
+
+.mixmach-progress-marker__label {
+  position: absolute;
+  top: 26px;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.65);
+}

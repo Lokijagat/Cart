@@ -1,6 +1,7 @@
 import {
   DiscountClass,
   ProductDiscountSelectionStrategy,
+  OrderDiscountSelectionStrategy,
 } from '../generated/api';
 
 /**
@@ -29,13 +30,86 @@ export function cartLinesDiscountsGenerateRun(input) {
   const hasProductDiscountClass = input.discount.discountClasses.includes(
     DiscountClass.Product,
   );
-  if (!hasProductDiscountClass) {
-    return NO_DISCOUNT;
+  const hasOrderDiscountClass = input.discount.discountClasses.includes(
+    DiscountClass.Order,
+  );
+
+  const operations = [];
+
+  if (hasProductDiscountClass) {
+    const productOperation = buildProductDiscountOperation(input);
+    if (productOperation) operations.push(productOperation);
   }
 
+  if (hasOrderDiscountClass) {
+    const orderOperation = buildOrderDiscountOperation(input);
+    if (orderOperation) operations.push(orderOperation);
+  }
+
+  return operations.length > 0 ? { operations } : NO_DISCOUNT;
+}
+
+/**
+ * Mixmach "spend X, get Y% off the order" progress-bar tiers. Each tier
+ * becomes its own candidate guarded by Shopify's own `orderMinimumSubtotal`
+ * condition, so Shopify picks whichever tier the current subtotal actually
+ * qualifies for (selectionStrategy MAXIMUM picks the best one if several do).
+ *
+ * @param {RunInput} input
+ */
+function buildOrderDiscountOperation(input) {
+  const rawConfig = input.discount.progressBarMetafield?.value;
+  if (!rawConfig) return null;
+
+  /** @type {{ tiers?: { minimumAmount?: number, percentage?: number }[] }} */
+  let config;
+  try {
+    config = JSON.parse(rawConfig);
+  } catch {
+    return null;
+  }
+
+  const tiers = Array.isArray(config.tiers) ? config.tiers : [];
+  const candidates = [];
+
+  for (const tier of tiers) {
+    const minimumAmount = Number(tier.minimumAmount);
+    const percentage = Number(tier.percentage);
+    if (!Number.isFinite(minimumAmount) || minimumAmount < 0) continue;
+    if (!Number.isFinite(percentage) || percentage <= 0 || percentage > 100) continue;
+
+    candidates.push({
+      message: `${percentage}% off orders over ${minimumAmount}`,
+      conditions: [
+        {
+          orderMinimumSubtotal: {
+            minimumAmount: minimumAmount.toFixed(2),
+            excludedCartLineIds: [],
+          },
+        },
+      ],
+      targets: [{ orderSubtotal: { excludedCartLineIds: [] } }],
+      value: { percentage: { value: percentage } },
+    });
+  }
+
+  if (candidates.length === 0) return null;
+
+  return {
+    orderDiscountsAdd: {
+      candidates,
+      selectionStrategy: OrderDiscountSelectionStrategy.Maximum,
+    },
+  };
+}
+
+/**
+ * @param {RunInput} input
+ */
+function buildProductDiscountOperation(input) {
   const rawConfig = input.discount.metafield?.value;
   if (!rawConfig) {
-    return NO_DISCOUNT;
+    return null;
   }
 
   /** @type {{ quantity?: number, bundlePrice?: number }} */
@@ -43,13 +117,13 @@ export function cartLinesDiscountsGenerateRun(input) {
   try {
     config = JSON.parse(rawConfig);
   } catch {
-    return NO_DISCOUNT;
+    return null;
   }
 
   const bundleSize = Number(config.quantity);
   const bundlePrice = Number(config.bundlePrice);
   if (!Number.isInteger(bundleSize) || bundleSize <= 0 || !Number.isFinite(bundlePrice) || bundlePrice < 0) {
-    return NO_DISCOUNT;
+    return null;
   }
 
   const eligibleUnits = [];
@@ -65,7 +139,7 @@ export function cartLinesDiscountsGenerateRun(input) {
 
   const numBundles = Math.floor(eligibleUnits.length / bundleSize);
   if (numBundles === 0) {
-    return NO_DISCOUNT;
+    return null;
   }
 
   eligibleUnits.sort((a, b) => b.unitPrice - a.unitPrice);
@@ -104,17 +178,13 @@ export function cartLinesDiscountsGenerateRun(input) {
   }
 
   if (candidates.length === 0) {
-    return NO_DISCOUNT;
+    return null;
   }
 
   return {
-    operations: [
-      {
-        productDiscountsAdd: {
-          candidates,
-          selectionStrategy: ProductDiscountSelectionStrategy.All,
-        },
-      },
-    ],
+    productDiscountsAdd: {
+      candidates,
+      selectionStrategy: ProductDiscountSelectionStrategy.All,
+    },
   };
 }

@@ -22,5 +22,8 @@ query CartInput($collectionIds: [ID!]) {
     metafield(namespace: "$app:mixmach-discount", key: "configuration") {
       value
     }
+    progressBarMetafield: metafield(namespace: "$app:mixmach-progress", key: "configuration") {
+      value
+    }
   }
 }

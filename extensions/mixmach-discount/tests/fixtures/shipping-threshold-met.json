@@ -1,0 +1,34 @@
+{
+  "payload": {
+    "export": "cart-delivery-options-discounts-generate-run",
+    "target": "cart.delivery-options.discounts.generate.run",
+    "input": {
+      "cart": {
+        "cost": { "subtotalAmount": { "amount": "600.00" } },
+        "deliveryGroups": [{ "id": "gid://shopify/CartDeliveryGroup/0" }]
+      },
+      "discount": {
+        "discountClasses": ["SHIPPING"],
+        "metafield": {
+          "value": "{\"freeShippingThreshold\":499}"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "deliveryDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "Free shipping unlocked",
+                "targets": [{ "deliveryGroup": { "id": "gid://shopify/CartDeliveryGroup/0" } }],
+                "value": { "percentage": { "value": 100 } }
+              }
+            ],
+            "selectionStrategy": "ALL"
+          }
+        }
+      ]
+    }
+  }
+}

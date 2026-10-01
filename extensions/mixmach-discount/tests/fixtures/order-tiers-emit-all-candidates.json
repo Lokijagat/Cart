@@ -1,0 +1,55 @@
+{
+  "payload": {
+    "export": "cart-lines-discounts-generate-run",
+    "target": "cart.lines.discounts.generate.run",
+    "input": {
+      "cart": {
+        "lines": []
+      },
+      "discount": {
+        "discountClasses": ["ORDER"],
+        "metafield": null,
+        "progressBarMetafield": {
+          "value": "{\"tiers\":[{\"minimumAmount\":499,\"percentage\":5},{\"minimumAmount\":1200,\"percentage\":8}]}"
+        }
+      }
+    },
+    "output": {
+      "operations": [
+        {
+          "orderDiscountsAdd": {
+            "candidates": [
+              {
+                "message": "5% off orders over 499",
+                "conditions": [
+                  {
+                    "orderMinimumSubtotal": {
+                      "minimumAmount": "499.00",
+                      "excludedCartLineIds": []
+                    }
+                  }
+                ],
+                "targets": [{ "orderSubtotal": { "excludedCartLineIds": [] } }],
+                "value": { "percentage": { "value": 5 } }
+              },
+              {
+                "message": "8% off orders over 1200",
+                "conditions": [
+                  {
+                    "orderMinimumSubtotal": {
+                      "minimumAmount": "1200.00",
+                      "excludedCartLineIds": []
+                    }
+                  }
+                ],
+                "targets": [{ "orderSubtotal": { "excludedCartLineIds": [] } }],
+                "value": { "percentage": { "value": 8 } }
+              }
+            ],
+            "selectionStrategy": "MAXIMUM"
+          }
+        }
+      ]
+    }
+  }
+}
