@@ -1,9 +1,5 @@
 import prisma from "./db.server";
 
-const METAFIELD_NAMESPACE = "$app:mixmach-discount";
-const METAFIELD_KEY = "configuration";
-const FUNCTION_HANDLE = "mixmach-discount";
-
 export function listDiscounts(shop) {
   return prisma.discount.findMany({
     where: { shop },
@@ -15,19 +11,6 @@ export function getDiscount(shop, id) {
   return prisma.discount.findFirst({ where: { shop, id } });
 }
 
-function configMetafield({ collectionId, quantity, bundlePrice }) {
-  return {
-    namespace: METAFIELD_NAMESPACE,
-    key: METAFIELD_KEY,
-    type: "json",
-    value: JSON.stringify({
-      collectionIds: [collectionId],
-      quantity,
-      bundlePrice,
-    }),
-  };
-}
-
 async function callAdmin(admin, query, variables) {
   const response = await admin.graphql(query, { variables });
   const data = await response.json();
@@ -35,8 +18,80 @@ async function callAdmin(admin, query, variables) {
 }
 
 /**
+ * Average price of a collection's products, used to translate a flat
+ * "any N for ₹bundlePrice" offer into the percentage-off that a native
+ * (non-Function) discount needs. Exact only when every product in the
+ * collection shares one price; otherwise this is the best available
+ * approximation, since native discounts can't price an arbitrary mix of
+ * items down to one fixed total the way a Function could.
+ */
+async function averageCollectionPrice(admin, collectionId) {
+  const result = await callAdmin(
+    admin,
+    `#graphql
+    query CollectionAvgPrice($id: ID!) {
+      collection(id: $id) {
+        products(first: 100) {
+          nodes {
+            variants(first: 1) {
+              nodes {
+                price
+              }
+            }
+          }
+        }
+      }
+    }`,
+    { id: collectionId },
+  );
+
+  const prices = (result.collection?.products?.nodes || [])
+    .map((p) => Number(p.variants?.nodes?.[0]?.price))
+    .filter((p) => Number.isFinite(p) && p > 0);
+
+  if (prices.length === 0) return 0;
+  return prices.reduce((a, b) => a + b, 0) / prices.length;
+}
+
+function percentOffForBundle(avgPrice, quantity, bundlePrice) {
+  if (avgPrice <= 0 || quantity <= 0) return 0;
+  const fullPrice = avgPrice * quantity;
+  const percent = 1 - bundlePrice / fullPrice;
+  return Math.min(0.95, Math.max(0, percent));
+}
+
+function discountInput({ title, percent, quantity, collectionId, endsAt }) {
+  return {
+    title,
+    startsAt: new Date().toISOString(),
+    endsAt,
+    combinesWith: {
+      orderDiscounts: true,
+      productDiscounts: true,
+      shippingDiscounts: true,
+    },
+    minimumRequirement: {
+      quantity: { greaterThanOrEqualToQuantity: String(quantity) },
+    },
+    customerGets: {
+      appliesOnOneTimePurchase: true,
+      appliesOnSubscription: false,
+      items: { collections: { add: [collectionId] } },
+      value: {
+        discountOnQuantity: {
+          quantity: String(quantity),
+          effect: { percentage: percent },
+        },
+      },
+    },
+  };
+}
+
+/**
  * Creates the Discount row in our DB. If status is ACTIVE or DISABLED, also
- * creates the underlying Shopify automatic discount + Function metafield.
+ * creates the underlying native Shopify automatic discount (no Shopify
+ * Function involved — Functions on a custom app require Shopify Plus, which
+ * this store doesn't have).
  */
 export async function createDiscount(admin, shop, input) {
   const { name, collectionId, collectionTitle, quantity, bundlePrice, status } = input;
@@ -44,13 +99,16 @@ export async function createDiscount(admin, shop, input) {
   let shopifyDiscountId = null;
 
   if (status !== "DRAFT") {
+    const avgPrice = await averageCollectionPrice(admin, collectionId);
+    const percent = percentOffForBundle(avgPrice, quantity, bundlePrice);
+
     const result = await callAdmin(
       admin,
       `#graphql
-      mutation CreateMixmachDiscount($discount: DiscountAutomaticAppInput!) {
-        discountAutomaticAppCreate(automaticAppDiscount: $discount) {
-          automaticAppDiscount {
-            discountId
+      mutation CreateMixmachDiscount($discount: DiscountAutomaticBasicInput!) {
+        discountAutomaticBasicCreate(automaticBasicDiscount: $discount) {
+          automaticDiscountNode {
+            id
           }
           userErrors {
             field
@@ -59,28 +117,22 @@ export async function createDiscount(admin, shop, input) {
         }
       }`,
       {
-        discount: {
+        discount: discountInput({
           title: name,
-          functionHandle: FUNCTION_HANDLE,
-          discountClasses: ["PRODUCT"],
-          combinesWith: {
-            orderDiscounts: true,
-            productDiscounts: false,
-            shippingDiscounts: true,
-          },
-          startsAt: new Date().toISOString(),
+          percent,
+          quantity,
+          collectionId,
           endsAt: status === "DISABLED" ? pastDate() : null,
-          metafields: [configMetafield({ collectionId, quantity, bundlePrice })],
-        },
+        }),
       },
     );
 
-    const errors = result.discountAutomaticAppCreate.userErrors;
+    const errors = result.discountAutomaticBasicCreate.userErrors;
     if (errors.length > 0) {
       throw new Error(errors.map((e) => e.message).join(", "));
     }
 
-    shopifyDiscountId = result.discountAutomaticAppCreate.automaticAppDiscount.discountId;
+    shopifyDiscountId = result.discountAutomaticBasicCreate.automaticDiscountNode.id;
   }
 
   return prisma.discount.create({
@@ -112,13 +164,16 @@ export async function updateDiscount(admin, discount, input) {
     await deleteShopifyDiscount(admin, shopifyDiscountId);
     shopifyDiscountId = null;
   } else if (status !== "DRAFT" && !shopifyDiscountId) {
+    const avgPrice = await averageCollectionPrice(admin, collectionId);
+    const percent = percentOffForBundle(avgPrice, quantity, bundlePrice);
+
     const result = await callAdmin(
       admin,
       `#graphql
-      mutation CreateMixmachDiscount($discount: DiscountAutomaticAppInput!) {
-        discountAutomaticAppCreate(automaticAppDiscount: $discount) {
-          automaticAppDiscount {
-            discountId
+      mutation CreateMixmachDiscount($discount: DiscountAutomaticBasicInput!) {
+        discountAutomaticBasicCreate(automaticBasicDiscount: $discount) {
+          automaticDiscountNode {
+            id
           }
           userErrors {
             field
@@ -127,34 +182,31 @@ export async function updateDiscount(admin, discount, input) {
         }
       }`,
       {
-        discount: {
+        discount: discountInput({
           title: name,
-          functionHandle: FUNCTION_HANDLE,
-          discountClasses: ["PRODUCT"],
-          combinesWith: {
-            orderDiscounts: true,
-            productDiscounts: false,
-            shippingDiscounts: true,
-          },
-          startsAt: new Date().toISOString(),
+          percent,
+          quantity,
+          collectionId,
           endsAt: status === "DISABLED" ? pastDate() : null,
-          metafields: [configMetafield({ collectionId, quantity, bundlePrice })],
-        },
+        }),
       },
     );
 
-    const errors = result.discountAutomaticAppCreate.userErrors;
+    const errors = result.discountAutomaticBasicCreate.userErrors;
     if (errors.length > 0) {
       throw new Error(errors.map((e) => e.message).join(", "));
     }
 
-    shopifyDiscountId = result.discountAutomaticAppCreate.automaticAppDiscount.discountId;
+    shopifyDiscountId = result.discountAutomaticBasicCreate.automaticDiscountNode.id;
   } else if (shopifyDiscountId) {
+    const avgPrice = await averageCollectionPrice(admin, collectionId);
+    const percent = percentOffForBundle(avgPrice, quantity, bundlePrice);
+
     const result = await callAdmin(
       admin,
       `#graphql
-      mutation UpdateMixmachDiscount($id: ID!, $discount: DiscountAutomaticAppInput!) {
-        discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $discount) {
+      mutation UpdateMixmachDiscount($id: ID!, $discount: DiscountAutomaticBasicInput!) {
+        discountAutomaticBasicUpdate(id: $id, automaticBasicDiscount: $discount) {
           userErrors {
             field
             message
@@ -163,15 +215,17 @@ export async function updateDiscount(admin, discount, input) {
       }`,
       {
         id: shopifyDiscountId,
-        discount: {
+        discount: discountInput({
           title: name,
+          percent,
+          quantity,
+          collectionId,
           endsAt: status === "DISABLED" ? pastDate() : null,
-          metafields: [configMetafield({ collectionId, quantity, bundlePrice })],
-        },
+        }),
       },
     );
 
-    const errors = result.discountAutomaticAppUpdate.userErrors;
+    const errors = result.discountAutomaticBasicUpdate.userErrors;
     if (errors.length > 0) {
       throw new Error(errors.map((e) => e.message).join(", "));
     }

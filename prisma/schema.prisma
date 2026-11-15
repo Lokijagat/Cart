@@ -9,8 +9,8 @@ generator client {
 // enough when changing adapters.
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
-  provider = "sqlite"
-  url      = "file:dev.sqlite"
+  provider = "mysql"
+  url      = env("DATABASE_URL")
 }
 
 model Session {
@@ -66,25 +66,26 @@ model FlashOffer {
 }
 
 model ProgressBar {
-  id                    String            @id @default(cuid())
-  shop                  String            @unique
-  enabled               Boolean           @default(false)
-  freeShippingThreshold Float?
-  showOnDrawer          Boolean           @default(true)
-  showOnCartPage        Boolean           @default(true)
-  shopifyDiscountId     String?
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
-  tiers                 ProgressBarTier[]
+  id                      String            @id @default(cuid())
+  shop                    String            @unique
+  enabled                 Boolean           @default(false)
+  freeShippingThreshold   Float?
+  showOnDrawer            Boolean           @default(true)
+  showOnCartPage          Boolean           @default(true)
+  freeShippingDiscountId  String?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+  tiers                   ProgressBarTier[]
 }
 
 model ProgressBarTier {
-  id            String      @id @default(cuid())
-  progressBarId String
-  progressBar   ProgressBar @relation(fields: [progressBarId], references: [id], onDelete: Cascade)
-  minimumAmount Float
-  percentage    Float
-  position      Int         @default(0)
+  id                String      @id @default(cuid())
+  progressBarId     String
+  progressBar       ProgressBar @relation(fields: [progressBarId], references: [id], onDelete: Cascade)
+  minimumAmount     Float
+  percentage        Float
+  position          Int         @default(0)
+  shopifyDiscountId String?
 
   @@index([progressBarId])
 }

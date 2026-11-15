@@ -1,26 +1,10 @@
 import prisma from "./db.server";
 
-const METAFIELD_NAMESPACE = "$app:mixmach-progress";
-const METAFIELD_KEY = "configuration";
-const FUNCTION_HANDLE = "mixmach-discount";
-
 export function getProgressBar(shop) {
   return prisma.progressBar.findUnique({
     where: { shop },
     include: { tiers: { orderBy: { position: "asc" } } },
   });
-}
-
-function configMetafield({ freeShippingThreshold, tiers }) {
-  return {
-    namespace: METAFIELD_NAMESPACE,
-    key: METAFIELD_KEY,
-    type: "json",
-    value: JSON.stringify({
-      freeShippingThreshold,
-      tiers: tiers.map((t) => ({ minimumAmount: t.minimumAmount, percentage: t.percentage })),
-    }),
-  };
 }
 
 async function callAdmin(admin, query, variables) {
@@ -29,88 +13,146 @@ async function callAdmin(admin, query, variables) {
   return data.data;
 }
 
-const CREATE_MUTATION = `#graphql
-  mutation CreateMixmachProgressBar($discount: DiscountAutomaticAppInput!) {
-    discountAutomaticAppCreate(automaticAppDiscount: $discount) {
-      automaticAppDiscount {
-        discountId
+/**
+ * Each spend tier is its own native "amount off order" automatic discount
+ * (no Shopify Function — Functions on a custom app need Shopify Plus, which
+ * this store doesn't have). combinesWith.orderDiscounts is false on every
+ * tier so that when a cart clears more than one threshold, Shopify applies
+ * only the single best (highest-value) tier rather than stacking them.
+ */
+async function createTierDiscount(admin, tier) {
+  const result = await callAdmin(
+    admin,
+    `#graphql
+    mutation CreateProgressBarTier($discount: DiscountAutomaticBasicInput!) {
+      discountAutomaticBasicCreate(automaticBasicDiscount: $discount) {
+        automaticDiscountNode {
+          id
+        }
+        userErrors {
+          field
+          message
+        }
       }
-      userErrors {
-        field
-        message
-      }
-    }
-  }`;
-
-const UPDATE_MUTATION = `#graphql
-  mutation UpdateMixmachProgressBar($id: ID!, $discount: DiscountAutomaticAppInput!) {
-    discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $discount) {
-      userErrors {
-        field
-        message
-      }
-    }
-  }`;
-
-const DELETE_MUTATION = `#graphql
-  mutation DeleteMixmachProgressBar($id: ID!) {
-    discountAutomaticDelete(id: $id) {
-      userErrors {
-        field
-        message
-      }
-    }
-  }`;
-
-function discountInput({ freeShippingThreshold, tiers, endsAt }) {
-  return {
-    title: "Mixmach Progress Bar",
-    functionHandle: FUNCTION_HANDLE,
-    discountClasses: ["ORDER", "SHIPPING"],
-    combinesWith: {
-      orderDiscounts: true,
-      productDiscounts: true,
-      shippingDiscounts: true,
+    }`,
+    {
+      discount: {
+        title: `Mixmach Progress Bar — ${tier.percentage}% at ₹${tier.minimumAmount}+`,
+        startsAt: new Date().toISOString(),
+        endsAt: null,
+        combinesWith: {
+          orderDiscounts: false,
+          productDiscounts: true,
+          shippingDiscounts: true,
+        },
+        minimumRequirement: {
+          subtotal: { greaterThanOrEqualToAmount: String(tier.minimumAmount) },
+        },
+        customerGets: {
+          appliesOnOneTimePurchase: true,
+          appliesOnSubscription: false,
+          items: { all: true },
+          value: { percentage: tier.percentage / 100 },
+        },
+      },
     },
-    startsAt: new Date().toISOString(),
-    endsAt,
-    metafields: [configMetafield({ freeShippingThreshold, tiers })],
-  };
+  );
+
+  const errors = result.discountAutomaticBasicCreate.userErrors;
+  if (errors.length > 0) {
+    throw new Error(errors.map((e) => e.message).join(", "));
+  }
+  return result.discountAutomaticBasicCreate.automaticDiscountNode.id;
+}
+
+async function deleteDiscount(admin, shopifyDiscountId) {
+  if (!shopifyDiscountId) return;
+  const result = await callAdmin(
+    admin,
+    `#graphql
+    mutation DeleteProgressBarDiscount($id: ID!) {
+      discountAutomaticDelete(id: $id) {
+        userErrors {
+          field
+          message
+        }
+      }
+    }`,
+    { id: shopifyDiscountId },
+  );
+  const errors = result.discountAutomaticDelete.userErrors;
+  if (errors.length > 0) {
+    throw new Error(errors.map((e) => e.message).join(", "));
+  }
+}
+
+async function createFreeShippingDiscount(admin, freeShippingThreshold) {
+  const result = await callAdmin(
+    admin,
+    `#graphql
+    mutation CreateProgressBarShipping($discount: DiscountAutomaticFreeShippingInput!) {
+      discountAutomaticFreeShippingCreate(freeShippingAutomaticDiscount: $discount) {
+        automaticDiscountNode {
+          id
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }`,
+    {
+      discount: {
+        title: `Mixmach Progress Bar — Free shipping at ₹${freeShippingThreshold}+`,
+        startsAt: new Date().toISOString(),
+        endsAt: null,
+        combinesWith: {
+          orderDiscounts: true,
+          productDiscounts: true,
+        },
+        minimumRequirement: {
+          subtotal: { greaterThanOrEqualToAmount: String(freeShippingThreshold) },
+        },
+      },
+    },
+  );
+
+  const errors = result.discountAutomaticFreeShippingCreate.userErrors;
+  if (errors.length > 0) {
+    throw new Error(errors.map((e) => e.message).join(", "));
+  }
+  return result.discountAutomaticFreeShippingCreate.automaticDiscountNode.id;
 }
 
 /**
  * Creates or updates the shop's single Progress Bar row, keeping the
- * underlying Shopify automatic discount in sync:
- * - enabled: false -> deletes the Shopify discount (config stays in our DB).
- * - enabled: true, no existing Shopify discount -> creates it.
- * - enabled: true, existing Shopify discount -> updates title/metafield.
+ * underlying native Shopify discounts in sync. Tiers are always replaced
+ * wholesale (matching how the admin form submits them), so on every save
+ * with enabled: true we delete the previous tiers' and free-shipping
+ * discounts, then create fresh ones for the new config.
  */
 export async function saveProgressBar(admin, shop, input) {
   const { enabled, freeShippingThreshold, showOnDrawer, showOnCartPage, tiers } = input;
 
-  const existing = await prisma.progressBar.findUnique({ where: { shop } });
-  let shopifyDiscountId = existing?.shopifyDiscountId ?? null;
+  const existing = await prisma.progressBar.findUnique({
+    where: { shop },
+    include: { tiers: true },
+  });
 
-  if (!enabled && shopifyDiscountId) {
-    await deleteShopifyDiscount(admin, shopifyDiscountId);
-    shopifyDiscountId = null;
-  } else if (enabled && !shopifyDiscountId) {
-    const result = await callAdmin(admin, CREATE_MUTATION, {
-      discount: discountInput({ freeShippingThreshold, tiers, endsAt: null }),
-    });
-    const errors = result.discountAutomaticAppCreate.userErrors;
-    if (errors.length > 0) {
-      throw new Error(errors.map((e) => e.message).join(", "));
+  for (const tier of existing?.tiers ?? []) {
+    await deleteDiscount(admin, tier.shopifyDiscountId);
+  }
+  await deleteDiscount(admin, existing?.freeShippingDiscountId);
+
+  let freeShippingDiscountId = null;
+  let tiersWithDiscountIds = tiers.map((t) => ({ ...t }));
+
+  if (enabled) {
+    if (freeShippingThreshold != null) {
+      freeShippingDiscountId = await createFreeShippingDiscount(admin, freeShippingThreshold);
     }
-    shopifyDiscountId = result.discountAutomaticAppCreate.automaticAppDiscount.discountId;
-  } else if (enabled && shopifyDiscountId) {
-    const result = await callAdmin(admin, UPDATE_MUTATION, {
-      id: shopifyDiscountId,
-      discount: discountInput({ freeShippingThreshold, tiers, endsAt: null }),
-    });
-    const errors = result.discountAutomaticAppUpdate.userErrors;
-    if (errors.length > 0) {
-      throw new Error(errors.map((e) => e.message).join(", "));
+    for (const tier of tiersWithDiscountIds) {
+      tier.shopifyDiscountId = await createTierDiscount(admin, tier);
     }
   }
 
@@ -122,18 +164,18 @@ export async function saveProgressBar(admin, shop, input) {
       freeShippingThreshold,
       showOnDrawer,
       showOnCartPage,
-      shopifyDiscountId,
-      tiers: { create: tiers.map((t, index) => ({ ...t, position: index })) },
+      freeShippingDiscountId,
+      tiers: { create: tiersWithDiscountIds.map((t, index) => ({ ...t, position: index })) },
     },
     update: {
       enabled,
       freeShippingThreshold,
       showOnDrawer,
       showOnCartPage,
-      shopifyDiscountId,
+      freeShippingDiscountId,
       tiers: {
         deleteMany: {},
-        create: tiers.map((t, index) => ({ ...t, position: index })),
+        create: tiersWithDiscountIds.map((t, index) => ({ ...t, position: index })),
       },
     },
     include: { tiers: true },
@@ -167,12 +209,4 @@ export function parseTiersFromFormData(formData) {
   });
 
   return { tiers, errors };
-}
-
-async function deleteShopifyDiscount(admin, shopifyDiscountId) {
-  const result = await callAdmin(admin, DELETE_MUTATION, { id: shopifyDiscountId });
-  const errors = result.discountAutomaticDelete.userErrors;
-  if (errors.length > 0) {
-    throw new Error(errors.map((e) => e.message).join(", "));
-  }
 }
