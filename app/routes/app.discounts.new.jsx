@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { useLoaderData, useNavigation, Form, redirect } from "react-router";
+import { useActionData, useLoaderData, useNavigation, Form, redirect } from "react-router";
 import { createDiscount } from "../discounts.server";
 
 export async function loader({ request }) {
@@ -61,6 +61,8 @@ export async function action({ request }) {
 
 export default function NewDiscount() {
   const { collections } = useLoaderData();
+  const actionData = useActionData();
+  const errors = actionData?.errors ?? {};
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
@@ -95,12 +97,20 @@ export default function NewDiscount() {
       <s-section heading="Bundle details">
         <Form method="post">
           <s-stack direction="block" gap="base">
-            <s-text-field label="Discount Name" name="name" placeholder="Summer Bundle" />
+            {errors.form && <s-banner tone="critical">{errors.form}</s-banner>}
+
+            <s-text-field
+              label="Discount Name"
+              name="name"
+              placeholder="Summer Bundle"
+              error={errors.name}
+            />
 
             <s-select
               label="Choose Collection"
               name="collectionId"
               value={collectionId}
+              error={errors.collectionId}
               onChange={(event) => setCollectionId(event.currentTarget.value)}
             >
               <s-option value="">Select Collection</s-option>
@@ -135,6 +145,7 @@ export default function NewDiscount() {
               type="number"
               min="0"
               step="0.01"
+              error={errors.bundlePrice}
             />
 
             <s-select label="Status" name="status" defaultValue="DRAFT">

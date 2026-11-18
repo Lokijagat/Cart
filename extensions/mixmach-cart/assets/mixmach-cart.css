@@ -58,9 +58,10 @@
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #ffffff;
-  border: 2px solid rgba(0, 0, 0, 0.15);
+  background: #d1d5db;
+  border: 2px solid #d1d5db;
   font-size: 11px;
+  transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
 .mixmach-progress-marker--reached .mixmach-progress-marker__icon {
