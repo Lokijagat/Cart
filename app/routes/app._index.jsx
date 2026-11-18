@@ -6,7 +6,19 @@ import { listDiscounts, getDiscount, updateDiscount, deleteDiscount } from "../d
 export async function loader({ request }) {
   const { session } = await authenticate.admin(request);
   const discounts = await listDiscounts(session.shop);
-  return { discounts };
+
+  // Theme editor deep links (App Store requirement 5.1.3). The handles are
+  // the block filenames in extensions/mixmach-cart/blocks.
+  // eslint-disable-next-line no-undef
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const editorUrl = `https://${session.shop}/admin/themes/current/editor`;
+  const setupLinks = {
+    drawerEmbed: `${editorUrl}?context=apps&activateAppId=${apiKey}/flash-offer-drawer`,
+    flashOfferBlock: `${editorUrl}?template=cart&addAppBlockId=${apiKey}/flash-offer-page&target=newAppsSection`,
+    progressBarBlock: `${editorUrl}?template=cart&addAppBlockId=${apiKey}/progress-bar-page&target=newAppsSection`,
+  };
+
+  return { discounts, setupLinks };
 }
 
 export async function action({ request }) {
@@ -42,12 +54,65 @@ const STATUS_TONE = {
 };
 
 export default function Dashboard() {
-  const { discounts } = useLoaderData();
+  const { discounts, setupLinks } = useLoaderData();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
   return (
     <s-page heading="Mixmach">
+      <s-section heading="Set up Mixmach in your theme">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            Bundle discounts work at checkout as soon as you create them. To
+            show flash offers and the progress bar to shoppers, add Mixmach to
+            your theme. Each button opens the theme editor with the block
+            ready to add. Click Save in the theme editor to finish.
+          </s-paragraph>
+          <s-ordered-list>
+            <s-list-item>
+              <s-stack direction="block" gap="small-200">
+                <s-text type="strong">Turn on the cart drawer embed</s-text>
+                <s-text>
+                  Shows flash offers and the progress bar inside the cart
+                  drawer. In the theme editor, under App embeds, make sure
+                  &quot;Mixmach Drawer Offers&quot; is on.
+                </s-text>
+                <s-button href={setupLinks.drawerEmbed} target="_blank">
+                  Turn on drawer embed
+                </s-button>
+              </s-stack>
+            </s-list-item>
+            <s-list-item>
+              <s-stack direction="block" gap="small-200">
+                <s-text type="strong">Add flash offers to the cart page</s-text>
+                <s-text>
+                  Adds the &quot;Mixmach Flash Offers&quot; block to your cart
+                  page template.
+                </s-text>
+                <s-button href={setupLinks.flashOfferBlock} target="_blank">
+                  Add flash offers block
+                </s-button>
+              </s-stack>
+            </s-list-item>
+            <s-list-item>
+              <s-stack direction="block" gap="small-200">
+                <s-text type="strong">Add the progress bar to the cart page</s-text>
+                <s-text>
+                  Adds the &quot;Mixmach Progress Bar&quot; block to your cart
+                  page template.
+                </s-text>
+                <s-button href={setupLinks.progressBarBlock} target="_blank">
+                  Add progress bar block
+                </s-button>
+              </s-stack>
+            </s-list-item>
+          </s-ordered-list>
+          <s-paragraph>
+            Then create offers under Flash Offers and set up tiers under
+            Progress Bar.
+          </s-paragraph>
+        </s-stack>
+      </s-section>
       <s-section heading="Bundle discounts">
         <s-stack direction="block" gap="base">
           <s-stack direction="inline" gap="base" alignItems="center" justifyContent="space-between">

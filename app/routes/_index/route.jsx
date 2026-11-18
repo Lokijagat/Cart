@@ -1,7 +1,10 @@
-import { redirect, Form, useLoaderData } from "react-router";
-import { login } from "../../shopify.server";
+import { redirect } from "react-router";
 import styles from "./styles.module.css";
 
+// Public landing page. Merchants install and open Mixmach from the Shopify
+// App Store / Shopify admin, so this page never asks for a shop domain
+// (App Store requirement 2.3.1). Requests that carry a `shop` param come
+// from Shopify and are forwarded straight into the embedded app.
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
 
@@ -9,43 +12,34 @@ export const loader = async ({ request }) => {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
-  return { showForm: Boolean(login) };
+  return null;
 };
 
 export default function App() {
-  const { showForm } = useLoaderData();
-
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <h1 className={styles.heading}>Mixmach</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          Bundle discounts, flash offers and a free-shipping progress bar for
+          your Shopify cart.
         </p>
-        {showForm && (
-          <Form className={styles.form} method="post" action="/auth/login">
-            <label className={styles.label}>
-              <span>Shop domain</span>
-              <input className={styles.input} type="text" name="shop" />
-              <span>e.g: my-shop-domain.myshopify.com</span>
-            </label>
-            <button className={styles.button} type="submit">
-              Log in
-            </button>
-          </Form>
-        )}
+        <p>
+          Install Mixmach from the Shopify App Store, then open it from your
+          Shopify admin.
+        </p>
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Bundle discounts</strong>. Sell any N products from a
+            collection for one fixed bundle price.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Flash offers</strong>. Show your own offer banners in the
+            cart drawer and on the cart page.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Progress bar</strong>. Show shoppers how close they are to
+            free shipping and tiered discounts.
           </li>
         </ul>
       </div>
