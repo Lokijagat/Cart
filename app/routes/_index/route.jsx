@@ -42,6 +42,9 @@ export default function App() {
             free shipping and tiered discounts.
           </li>
         </ul>
+        <p>
+          <a href="/privacy">Privacy policy</a>
+        </p>
       </div>
     </div>
   );
