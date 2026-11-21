@@ -73,16 +73,13 @@ function discountInput({ title, percent, quantity, collectionId, endsAt }) {
     minimumRequirement: {
       quantity: { greaterThanOrEqualToQuantity: String(quantity) },
     },
+    // Basic discounts reject discountOnQuantity (Buy X Get Y only) and the
+    // appliesOn* fields on shops without subscriptions, so the bundle is a
+    // plain percentage off the collection's items, unlocked by the minimum
+    // quantity above.
     customerGets: {
-      appliesOnOneTimePurchase: true,
-      appliesOnSubscription: false,
       items: { collections: { add: [collectionId] } },
-      value: {
-        discountOnQuantity: {
-          quantity: String(quantity),
-          effect: { percentage: percent },
-        },
-      },
+      value: { percentage: percent },
     },
   };
 }

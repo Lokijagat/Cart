@@ -49,8 +49,6 @@ async function createTierDiscount(admin, tier) {
           subtotal: { greaterThanOrEqualToAmount: String(tier.minimumAmount) },
         },
         customerGets: {
-          appliesOnOneTimePurchase: true,
-          appliesOnSubscription: false,
           items: { all: true },
           value: { percentage: tier.percentage / 100 },
         },
